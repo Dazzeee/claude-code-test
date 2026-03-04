@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bouncing Ball</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0f0f1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Segoe UI', sans-serif;
+      color: #e0e0e0;
+    }
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 16px;
+      letter-spacing: 2px;
+      color: #a0a0c0;
+      text-transform: uppercase;
+    }
+    #container {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(100, 100, 255, 0.15);
+    }
+    canvas {
+      display: block;
+      background: #1a1a2e;
+      cursor: crosshair;
+    }
+    #stats {
+      margin-top: 14px;
+      display: flex;
+      gap: 32px;
+      font-size: 0.85rem;
+      color: #8080a0;
+    }
+    #stats span { color: #c0c0ff; font-weight: 600; }
+    #controls {
+      margin-top: 16px;
+    }
+    button {
+      background: #2a2a4a;
+      color: #c0c0ff;
+      border: 1px solid #4040a0;
+      padding: 8px 24px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    button:hover {
+      background: #3a3a6a;
+      border-color: #7070d0;
+    }
+    #hint {
+      margin-top: 10px;
+      font-size: 0.75rem;
+      color: #555570;
+    }
+  </style>
+</head>
+<body>
+  <h1>Bouncing Ball</h1>
+  <div id="container">
+    <canvas id="canvas" width="600" height="450"></canvas>
+  </div>
+  <div id="stats">
+    Bounces: <span id="bounceCount">0</span>
+    &nbsp;&nbsp;Speed: <span id="speed">0</span>
+  </div>
+  <div id="controls">
+    <button id="resetBtn">Reset</button>
+  </div>
+  <div id="hint">Click on the canvas to launch the ball from that point</div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+
+    const RADIUS = 18;
+    const GRAVITY = 0.3;
+    const DAMPING = 0.82;
+    const TRAIL_LENGTH = 20;
+
+    let ball, bounces, trail;
+
+    function randomVelocity() {
+      const angle = (Math.random() * 60 + 30) * (Math.PI / 180);
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const speed = 6 + Math.random() * 4;
+      return { vx: dir * speed * Math.cos(angle), vy: -speed * Math.sin(angle) };
+    }
+
+    function init(x, y) {
+      const v = randomVelocity();
+      ball = { x: x ?? W / 2, y: y ?? H / 3, ...v };
+      bounces = 0;
+      trail = [];
+    }
+
+    init();
+
+    // Gradient colors cycle
+    const BALL_COLORS = [
+      ['#ff6b6b', '#ff2244'],
+      ['#6bcfff', '#2288ff'],
+      ['#6bff9e', '#22cc55'],
+      ['#ffcc6b', '#ff8822'],
+      ['#d06bff', '#8822ff'],
+    ];
+    let colorIdx = 0;
+
+    function nextColor() {
+      colorIdx = (colorIdx + 1) % BALL_COLORS.length;
+    }
+
+    function drawBall() {
+      const [c1, c2] = BALL_COLORS[colorIdx];
+      const grad = ctx.createRadialGradient(
+        ball.x - RADIUS * 0.3, ball.y - RADIUS * 0.3, RADIUS * 0.1,
+        ball.x, ball.y, RADIUS
+      );
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.3, c1);
+      grad.addColorStop(1, c2);
+
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.shadowColor = c1;
+      ctx.shadowBlur = 18;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    function drawTrail() {
+      for (let i = 0; i < trail.length; i++) {
+        const alpha = (i / trail.length) * 0.35;
+        const r = RADIUS * (i / trail.length) * 0.8;
+        const [c1] = BALL_COLORS[colorIdx];
+        ctx.beginPath();
+        ctx.arc(trail[i].x, trail[i].y, r, 0, Math.PI * 2);
+        ctx.fillStyle = c1 + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+        ctx.fill();
+      }
+    }
+
+    function update() {
+      // Save trail
+      trail.push({ x: ball.x, y: ball.y });
+      if (trail.length > TRAIL_LENGTH) trail.shift();
+
+      ball.vy += GRAVITY;
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Left / right walls
+      if (ball.x - RADIUS < 0) {
+        ball.x = RADIUS;
+        ball.vx = Math.abs(ball.vx);
+        bounces++;
+        nextColor();
+      } else if (ball.x + RADIUS > W) {
+        ball.x = W - RADIUS;
+        ball.vx = -Math.abs(ball.vx);
+        bounces++;
+        nextColor();
+      }
+
+      // Ceiling
+      if (ball.y - RADIUS < 0) {
+        ball.y = RADIUS;
+        ball.vy = Math.abs(ball.vy) * DAMPING;
+        bounces++;
+        nextColor();
+      }
+
+      // Floor
+      if (ball.y + RADIUS > H) {
+        ball.y = H - RADIUS;
+        ball.vy = -Math.abs(ball.vy) * DAMPING;
+        // Stop micro-bouncing
+        if (Math.abs(ball.vy) < 1.5) ball.vy = 0;
+        bounces++;
+        nextColor();
+      }
+    }
+
+    function drawFloor() {
+      ctx.fillStyle = 'rgba(100, 100, 180, 0.06)';
+      ctx.fillRect(0, H - 3, W, 3);
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, W, H);
+      drawFloor();
+      drawTrail();
+      update();
+      drawBall();
+
+      // Update stats
+      const speed = Math.sqrt(ball.vx ** 2 + ball.vy ** 2).toFixed(1);
+      document.getElementById('bounceCount').textContent = bounces;
+      document.getElementById('speed').textContent = speed;
+
+      requestAnimationFrame(render);
+    }
+
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      init(x, y);
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      init();
+    });
+
+    render();
+  </script>
+</body>
+</html>
